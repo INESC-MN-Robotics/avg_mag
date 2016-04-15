@@ -19,6 +19,16 @@
 
 using namespace std;
 
+
+__global__ void init_map(vec *d_coord){
+	int i = blockDim.x*blockIdx.x + threadIdx.x;
+	d_coord[i].x = (i+1 % 128) * 128 * 3.9E-6;
+	d_coord[i].y = ((int)1 + ((int)i / (int)128) * (double)3.9E-6);
+	d_coord[i].z = 0;
+}
+
+
+
 int main(){
 	// PLACA GRÁFICA: NVIDIA GEFORCE 820M - COMPUTE CAPABILITY: 2.1
 
@@ -27,6 +37,7 @@ int main(){
 	int nj = 128*ndip; //# de blocos (linhas da matriz*dipolos do pilar = 6400)
 	int i, j = 0, k = 0, l = 0;
 	bool a = 1;
+	string fileplace_def, fileplace_vec;
 
 	int threadsPerBlock = ni;
 	int BlocksPerGrid = nj;
@@ -48,17 +59,39 @@ int main(){
 	cudaMalloc(&d_pil_pos, sizeof(double)*ndip);
 	cudaMalloc(&d_Hi_inc, sizeof(double)*ni*nj);
 	cudaMalloc(&d_dip, sizeof(double)*ndip);
-	cudaMalloc(&d_coord, sizeof(double)*ni*ni);
+	cudaMalloc(&d_coord, sizeof(vec)*ni*ni);
 
 	cout << "POWERED BY CUDA" << endl << endl;
 
 	_sleep(2000);
 
-	for (i = 0; i < 31; i++){
+	for (i = 1; i < 2; i++){
+
+		//------- PARSING (Entrada de dados) -------//
+
+		// O delimitador é qq caracter que não seja um número válido (para ints e floating points de qq precisão)
+
+		fileplace_def = "C:\\Users\\Pedro\\Documents\\MATLAB\\dados\\defs_"+to_string(i)+".txt";
+		fileplace_vec = "C:\\Users\\Pedro\\Documents\\MATLAB\\dados\\vecs_"+to_string(i)+".txt";
+
+		fstream filein_def;
+		fstream filein_vec;
+		filein_def.open(fileplace_def);
+		filein_vec.open(fileplace_vec);
+
+		for (j = 0; j < ndip; j++){
+			filein_def >> h_pil_pos[j].x >> h_pil_pos[j].y >> h_pil_pos[j].z;
+			filein_vec >> h_dip[j].x >> h_dip[j].y >> h_dip[j].z;
+			//cout << h_pil_pos[j] << endl;
+			//cout << h_dip[j] << endl;
+		}
+
+		filein_def.close();
+		filein_vec.close();
 
 		//-----------INICIALIZAÇÃO------------------//
 
-		//init_rand << <BlocksPerGrid, threadsPerBlock >> >(s);
+		init_map << <BlocksPerGrid, threadsPerBlock >> >(d_coord);
 		//init_doubles << <BlocksPerGrid, threadsPerBlock >> >(d_Ej, d_Hmj, d_kMj, d_exch, d_demag);
 		//init_Mi << <BlocksPerGrid, threadsPerBlock >> >(d_Mi, s, theta, 1.57);
 		//cudaMemcpy(h_Mi, d_Mi, sizeof(vec)*ni*nj, cudaMemcpyDeviceToHost);
@@ -77,9 +110,6 @@ int main(){
 		//d_rand << <BlocksPerGrid, threadsPerBlock >> >(d_Mi, s, theta, r);
 		//stripes << <BlocksPerGrid, threadsPerBlock >> >(d_Mi);
 
-		//------- PARSING (Entrada de dados) -------//
-
-		/* TO DO: Ler os dados e gravá-los no vetor de HOST apropriado (cópia de dados será feita após inicialização do GPU)*/
 
 		//------ DATA TRANSFER (H -> D) --------//
 
