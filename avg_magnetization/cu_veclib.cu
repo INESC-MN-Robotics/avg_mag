@@ -64,6 +64,16 @@ __host__ __device__ vec operator*(const vec &a, double b)
 
 	return d;
 }
+__host__ __device__ vec operator/(const vec &a, double b)
+{
+	vec d;
+
+	d.x = a.x/b;
+	d.y = a.y/b;
+	d.z = a.z/b;
+
+	return d;
+}
 __host__ __device__ vec operator*(double a, const vec &b)
 {
 	vec d;

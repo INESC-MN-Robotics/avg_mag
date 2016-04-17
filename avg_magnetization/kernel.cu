@@ -17,16 +17,47 @@
 #include <float.h>
 #include "cu_veclib.cuh"
 
+#define PI = 3.14159
+
 using namespace std;
 
 
 __global__ void init_map(vec *d_coord){
 	int i = blockDim.x*blockIdx.x + threadIdx.x;
-	d_coord[i].x = (i+1 % 128) * 128 * 3.9E-6;
-	d_coord[i].y = ((int)1 + ((int)i / (int)128) * (double)3.9E-6);
-	d_coord[i].z = 0;
+	int j = blockDim.y*blockIdx.y + threadIdx.y;
+	if (i < 128 && j < 128){
+		d_coord[i + j * 128].x = i*0.001 / (double)128;
+		d_coord[i + j * 128].y = j*0.001 / (double)128;
+		d_coord[i + j * 128].z = 0;
+	}
 }
 
+__global__ void init_pos(vec *d_pil_pos, double x_off, double y_off){
+	int i = blockDim.x*blockIdx.x + threadIdx.x;
+	if (i < 50){
+		d_pil_pos[i].x = d_pil_pos[i].x + x_off;
+		d_pil_pos[i].y = d_pil_pos[i].y + x_off;
+	}
+}
+
+__global__ void init_dist(vec *d_pil_pos, vec *d_coord, vec *d_dist){
+	int i = blockDim.x*blockIdx.x + threadIdx.x;
+	int j = blockDim.y*blockIdx.y + threadIdx.y;
+	if (i < 128*128 && j < 50){
+		d_dist[i + 128 * 128 * j] = d_coord[i + 128 * 128 * j]-d_pil_pos[j];
+	}
+}
+__global__ void calc_H(vec *d_dist, vec *d_dip, vec *d_Hi_inc, vec *d_Hi_tot, vec *d_Hi_temp, int *d_keys){
+	int i = blockDim.x*blockIdx.x + threadIdx.x;
+	int j = blockDim.y*blockIdx.y + threadIdx.y;
+	if (i < 128 * 128 && j < 50){
+		d_Hi_inc[i + 128 * 128 * j] = (double)3 * d_dist[i + 128 * 128 * j] * (d_dip[i + 128 * 128 * j] * d_dist[i + 128 * 128 * j]) / pow(d_dist[i + 128 * 128 * j].abs(), 5) - d_dip[i + 128 * 128 * j] / pow(d_dist[i + 128 * 128 * j].abs(),3);
+		d_Hi_temp[j + 128 * 128 * i] = d_Hi_inc[i + 128 * 128 * j];
+	}
+	if (i < 128 * 128 * 50){
+		d_keys[i] = 50;
+	}
+}
 
 
 int main(){
@@ -41,24 +72,31 @@ int main(){
 
 	int threadsPerBlock = ni;
 	int BlocksPerGrid = nj;
+	double x_off=0.0005, y_off=0.0005;
 
-	vec *h_dip, *h_pil_pos, *h_Hi_inc;
+	vec *h_dip, *h_pil_pos, *h_Hi_inc, *temp_dip;
 	vec h_Hi_avg(0, 0, 0);
 
 
 	//---------------------------ALOCAÇÃO DE ESPAÇO----------------------------//
 	h_dip = (vec*)malloc(sizeof(vec)*ndip); //Vector de magnetização dos dipolos
+	temp_dip = (vec*)malloc(sizeof(vec)*10); //Vector auxiliar
 	h_pil_pos = (vec*)malloc(sizeof(vec)*ndip); //Posição dos dipolos
 	h_Hi_inc = (vec*)malloc(sizeof(vec)*ni*ni); //Valor do campo incidente num elemento de área 
 	
-	vec *d_dist, *d_pil_pos, *d_Hi_inc, *d_dip, *d_coord;
+	int *d_keys, *d_rest;
+	vec *d_dist, *d_pil_pos, *d_Hi_inc, *d_dip, *d_coord, *d_Hi_temp, *d_Hi_tot;
 	vec *d_Mi_avg_p;
 
 	cudaMalloc(&d_Mi_avg_p, sizeof(vec));
 	cudaMalloc(&d_dist, sizeof(vec)*ni*nj);
-	cudaMalloc(&d_pil_pos, sizeof(double)*ndip);
-	cudaMalloc(&d_Hi_inc, sizeof(double)*ni*nj);
-	cudaMalloc(&d_dip, sizeof(double)*ndip);
+	cudaMalloc(&d_keys, sizeof(int)*ni*nj);
+	cudaMalloc(&d_rest, sizeof(int));
+	cudaMalloc(&d_pil_pos, sizeof(vec)*ndip);
+	cudaMalloc(&d_Hi_inc, sizeof(vec)*ni*nj);
+	cudaMalloc(&d_Hi_tot, sizeof(vec)*ni*ni);
+	cudaMalloc(&d_Hi_temp, sizeof(vec)*ni*nj);
+	cudaMalloc(&d_dip, sizeof(vec)*ndip);
 	cudaMalloc(&d_coord, sizeof(vec)*ni*ni);
 
 	cout << "POWERED BY CUDA" << endl << endl;
@@ -79,23 +117,41 @@ int main(){
 		filein_def.open(fileplace_def);
 		filein_vec.open(fileplace_vec);
 
+		for (j = 0; j < 10; j++){
+			filein_vec >> temp_dip[j].x >> temp_dip[j].y >> temp_dip[j].z;
+		}
+
+		filein_vec.close();
+
 		for (j = 0; j < ndip; j++){
+			k++;
+			if (k == 10)
+				k = 0;
 			filein_def >> h_pil_pos[j].x >> h_pil_pos[j].y >> h_pil_pos[j].z;
-			filein_vec >> h_dip[j].x >> h_dip[j].y >> h_dip[j].z;
-			//cout << h_pil_pos[j] << endl;
-			//cout << h_dip[j] << endl;
+			h_dip[j] = temp_dip[k];
 		}
 
 		filein_def.close();
-		filein_vec.close();
+
+		//------ DATA TRANSFER (H -> D) --------//
+
+		cudaMemcpy(d_dip, h_dip, sizeof(vec)*ndip, cudaMemcpyHostToDevice);
+		cudaMemcpy(d_pil_pos, h_pil_pos, sizeof(vec)*ndip, cudaMemcpyHostToDevice);
 
 		//-----------INICIALIZAÇÃO------------------//
 
 		init_map << <BlocksPerGrid, threadsPerBlock >> >(d_coord);
-		//init_doubles << <BlocksPerGrid, threadsPerBlock >> >(d_Ej, d_Hmj, d_kMj, d_exch, d_demag);
-		//init_Mi << <BlocksPerGrid, threadsPerBlock >> >(d_Mi, s, theta, 1.57);
-		//cudaMemcpy(h_Mi, d_Mi, sizeof(vec)*ni*nj, cudaMemcpyDeviceToHost);
+		init_pos << <BlocksPerGrid, threadsPerBlock >> >(d_pil_pos, x_off, y_off);
+		init_dist << <BlocksPerGrid, threadsPerBlock >> >(d_pil_pos, d_coord, d_dist);
 
+		//------ CÁLCULO ------ //
+		calc_H << <BlocksPerGrid, threadsPerBlock >> >(d_dist, d_dip, d_Hi_inc, d_Hi_tot, d_Hi_temp, d_keys);
+		thrust::device_ptr<vec> d_Hi_temp_thrust = thrust::device_pointer_cast(d_Hi_temp);
+		thrust::device_ptr<vec> d_Hi_tot_thrust = thrust::device_pointer_cast(d_Hi_tot);
+		thrust::device_ptr<int> d_keys_thrust = thrust::device_pointer_cast(d_keys);
+		thrust::device_ptr<int> d_rest_thrust = thrust::device_pointer_cast(d_rest);
+		thrust::reduce_by_key(d_keys_thrust, d_keys_thrust + 128 * 128, d_Hi_temp_thrust, d_rest_thrust, d_Hi_tot_thrust);
+		
 		//for (i = 0; i < ni*nj; i++){
 		//	Mi_avg = Mi_avg + h_Mi[i];
 		//}
@@ -111,9 +167,7 @@ int main(){
 		//stripes << <BlocksPerGrid, threadsPerBlock >> >(d_Mi);
 
 
-		//------ DATA TRANSFER (H -> D) --------//
 
-		//------ CÁLCULO ------ //
 
 		//------ DATA TRANSFER (D -> H) --------//
 
@@ -250,9 +304,8 @@ int main(){
 	free(h_dip);
 	free(h_pil_pos);
 	free(h_Hi_inc);
-
+	
 	cout << "PROGRAMA CORRIDO COM SUCESSO!" << endl << "Prima qualquer tecla para sair..." << endl;
-	cin.ignore();
 	cin.get();
 	return 0;
 }

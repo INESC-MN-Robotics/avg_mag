@@ -29,6 +29,7 @@ public:
 	friend std::ostream& operator<<(std::ostream& os, const vec& out);
 	friend __host__ __device__ vec operator+(const vec &pri, const vec &seg);
 	friend __host__ __device__ vec operator*(const vec &a, double b);
+	friend __host__ __device__ vec operator/(const vec &a, double b);
 	friend __host__ __device__ vec operator*(double a, const vec &b);
 	friend __host__ __device__ double operator*(const vec &a, const vec &b);
 	friend __host__ __device__ vec operator-(const vec &a, const vec &b);
