@@ -76,7 +76,7 @@ int main(){
 	int BlocksPerGrid = nj;
 	double x_off=0.0005, y_off=0.0005;
 
-	vec *h_dip, *h_pil_pos, *h_Hi_inc, *temp_dip;
+	vec *h_dip, *h_pil_pos, *h_Hi_inc, *temp_dip, *h_dist;
 	vec h_Hi_avg(0, 0, 0);
 
 
@@ -85,6 +85,7 @@ int main(){
 	temp_dip = (vec*)malloc(sizeof(vec)*10); //Vector auxiliar
 	h_pil_pos = (vec*)malloc(sizeof(vec)*ndip); //Posição dos dipolos
 	h_Hi_inc = (vec*)malloc(sizeof(vec)*ni*ni); //Valor do campo incidente num elemento de área 
+	h_dist = (vec*)malloc(sizeof(vec)*ni*ni);
 	
 	int *d_keys, *d_rest;
 	vec *d_dist, *d_pil_pos, *d_Hi_inc, *d_dip, *d_coord, *d_Hi_tot;
@@ -107,7 +108,7 @@ int main(){
 
 	cout << "POWERED BY CUDA" << endl << endl;
 
-	_sleep(2000);
+	//_sleep(2000);
 
 	fstream fileout_avgs;
 	fileplace_avgs = "C:\\Users\\Pedro\\Documents\\MATLAB\\dados\\avgs.txt";
@@ -165,12 +166,12 @@ int main(){
 		//------ DATA TRANSFER (D -> H) --------//
 
 		//cudaMemcpy(h_dist, d_Hi_inc, sizeof(vec)*ni*nj, cudaMemcpyDeviceToHost); //UNCOMMENT TO DIAGNOSE
-		fstream fileout_points;
+		ofstream fileout_points;
 		fileplace_points = "C:\\Users\\Pedro\\Documents\\CUDA_OUT\\points_" + to_string(i) + ".txt";
 		fileout_points.open(fileplace_points);
 		for (i = 0; i < ni; i++){
 			for (j = 0; j < ni; j++){
-				fileout_points << Hi_tot_thrust[i];
+				fileout_points << Hi_tot_thrust[i] << "\t";
 				h_Hi_avg = h_Hi_avg + Hi_tot_thrust[i];
 			}
 			fileout_points << endl;
