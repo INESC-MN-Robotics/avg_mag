@@ -43,7 +43,7 @@ __host__ __device__ vec& vec::operator=(const vec& seg){
 }
 
 std::ostream& operator<<(std::ostream& os, const vec& out){
-	os << out.x << "\t" << out.y << "\t" << out.z << endl;
+	os << out.x << "\t" << out.y << "\t" << out.z;
 	return os;
 }
 
