@@ -58,7 +58,7 @@ __global__ void calc_H(vec *d_dist, vec *d_dip, vec *d_Hi_inc, vec *d_Hi_tot, in
 			d_Hi_inc[k + 50 * i + 50 * 128 * j] = (double)3 * d_dist[k + 50 * i + 50 * 128 * j] * (d_dip[k] * d_dist[k + 50 * i + 50 * 128 * j]) / pow(d_dist[k + 50 * i + 50 * 128 * j].abs(), 5) - d_dip[k] / pow(d_dist[k + 50 * i + 50 * 128 * j].abs(), 3);
 	}
 	if (i < 128 * 128 * 50){
-		d_keys[i] = 50;
+		d_keys[i] = 1+i/(int)50;
 	}
 }
 
@@ -76,7 +76,8 @@ int main(){
 	int BlocksPerGrid = nj;
 	double x_off=0.0005, y_off=0.0005;
 
-	vec *h_dip, *h_pil_pos, *h_Hi_inc, *temp_dip, *h_dist;
+	vec *h_dip, *h_pil_pos, *h_Hi_inc, *temp_dip;
+	int *h_dist;
 	vec h_Hi_avg(0, 0, 0);
 
 
@@ -85,7 +86,7 @@ int main(){
 	temp_dip = (vec*)malloc(sizeof(vec)*10); //Vector auxiliar
 	h_pil_pos = (vec*)malloc(sizeof(vec)*ndip); //Posição dos dipolos
 	h_Hi_inc = (vec*)malloc(sizeof(vec)*ni*ni); //Valor do campo incidente num elemento de área 
-	h_dist = (vec*)malloc(sizeof(vec)*ni*ni);
+	h_dist = (int*)malloc(sizeof(int)*ni*ni);
 	
 	int *d_keys, *d_rest;
 	vec *d_dist, *d_pil_pos, *d_Hi_inc, *d_dip, *d_coord, *d_Hi_tot;
@@ -161,17 +162,18 @@ int main(){
 
 		//------ CÁLCULO ------ //
 		calc_H << <BlocksPerGrid, threadsPerBlock >> >(d_dist, d_dip, d_Hi_inc, d_Hi_tot, d_keys);
+		
 		thrust::reduce_by_key(keys_thrust, keys_thrust + ni * nj, Hi_inc_thrust, rest_thrust, Hi_tot_thrust);
 
 		//------ DATA TRANSFER (D -> H) --------//
 
-		//cudaMemcpy(h_dist, d_Hi_inc, sizeof(vec)*ni*nj, cudaMemcpyDeviceToHost); //UNCOMMENT TO DIAGNOSE
+		//cudaMemcpy(h_dist, d_keys, sizeof(int)*ni*nj, cudaMemcpyDeviceToHost); //UNCOMMENT TO DIAGNOSE
 		ofstream fileout_points;
 		fileplace_points = "C:\\Users\\Pedro\\Documents\\CUDA_OUT\\points_" + to_string(i) + ".txt";
 		fileout_points.open(fileplace_points);
-		for (i = 0; i < ni; i++){
-			for (j = 0; j < ni; j++){
-				fileout_points << Hi_tot_thrust[i] << "\t";
+		for (i = 0; i < ni * ni; i++){
+			for (j = 0; j < ndip; j++){
+				fileout_points << keys_thrust[j + i * 50] << "\t";
 				h_Hi_avg = h_Hi_avg + Hi_tot_thrust[i];
 			}
 			fileout_points << endl;
