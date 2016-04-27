@@ -48,7 +48,7 @@ __global__ void calc_H(vec *d_dist, vec *d_dip, vec *d_Hi_inc, vec *d_Hi_tot, in
 	for (k = 0; k < 50; k++){
 		if (i < 128 && j < 128){
 			d_Hi_inc[k + 50 * i + 50 * 128 * j] = (double)3 * d_dist[k + 50 * i + 50 * 128 * j] * (d_dip[k] * d_dist[k + 50 * i + 50 * 128 * j]) / pow(d_dist[k + 50 * i + 50 * 128 * j].abs(), 5) - d_dip[k] / pow(d_dist[k + 50 * i + 50 * 128 * j].abs(), 3);
-			d_Hi_inc[k + 50 * i + 50 * 128 * j] = d_Hi_inc[k + 50 * i + 50 * 128 * j] * 0.001;
+			d_Hi_inc[k + 50 * i + 50 * 128 * j] = d_Hi_inc[k + 50 * i + 50 * 128 * j] * 0.001 / (4 * PI);
 		}
 	}
 }
@@ -77,16 +77,13 @@ int main(){
 	double x_off=0.0005, y_off=0.0005;
 
 	vec *h_dip, *h_pil_pos, *h_Hi_inc, *temp_dip;
-	vec *h_dist;
 	vec h_Hi_avg(0, 0, 0);
-
 
 	//---------------------------ALOCAÇÃO DE ESPAÇO----------------------------//
 	h_dip = (vec*)malloc(sizeof(vec)*ndip); //Vector de magnetização dos dipolos
 	temp_dip = (vec*)malloc(sizeof(vec)*10); //Vector auxiliar
 	h_pil_pos = (vec*)malloc(sizeof(vec)*ndip); //Posição dos dipolos
 	h_Hi_inc = (vec*)malloc(sizeof(vec)*ni*ni); //Valor do campo incidente num elemento de área 
-	h_dist = (vec*)malloc(sizeof(vec)*ni*nj);
 	
 	int *d_keys, *d_rest;
 	vec *d_dist, *d_pil_pos, *d_Hi_inc, *d_dip, *d_coord, *d_Hi_tot;
@@ -107,7 +104,7 @@ int main(){
 	thrust::device_ptr<int> keys_thrust = thrust::device_pointer_cast(d_keys);
 	thrust::device_ptr<int> rest_thrust = thrust::device_pointer_cast(d_rest);
 
-	cout << "POWERED BY CUDA" << endl << endl;
+	cout << "Simulador de nanorods" << endl << endl;
 	
 	at = clock();
 
