@@ -46,8 +46,10 @@ __global__ void calc_H(vec *d_dist, vec *d_dip, vec *d_Hi_inc, vec *d_Hi_tot, in
 	int j = blockDim.y*blockIdx.y + threadIdx.y;
 	int k;
 	for (k = 0; k < 50; k++){
-		if (i < 128 && j < 128)
+		if (i < 128 && j < 128){
 			d_Hi_inc[k + 50 * i + 50 * 128 * j] = (double)3 * d_dist[k + 50 * i + 50 * 128 * j] * (d_dip[k] * d_dist[k + 50 * i + 50 * 128 * j]) / pow(d_dist[k + 50 * i + 50 * 128 * j].abs(), 5) - d_dip[k] / pow(d_dist[k + 50 * i + 50 * 128 * j].abs(), 3);
+			d_Hi_inc[k + 50 * i + 50 * 128 * j] = d_Hi_inc[k + 50 * i + 50 * 128 * j] * 0.001;
+		}
 	}
 }
 
@@ -65,7 +67,7 @@ int main(){
 	int ndip = 50; //# de dipolos
 	int ni = 128; //# de threads (linhas da matriz)
 	int nj = 128*ndip; //# de blocos (linhas da matriz*dipolos do pilar = 6400)
-	int i, j = 0, k = 0;
+	int i, j = 0, k = 0, f;
 	string fileplace_def, fileplace_vec, fileplace_points, fileplace_avgs;
 
 	int threadsPerBlock = ni;
@@ -109,13 +111,11 @@ int main(){
 	
 	at = clock();
 
-	//_sleep(2000);
-
-	fstream fileout_avgs;
-	fileplace_avgs = "C:\\Users\\Pedro\\Documents\\MATLAB\\dados\\avgs.txt";
+	ofstream fileout_avgs;
+	fileplace_avgs = "C:\\Users\\Pedro\\Documents\\CUDA\\OUT\\avgs.txt";
 	fileout_avgs.open(fileplace_avgs);
 
-	for (i = 1; i < 2; i++){
+	for (f = 1; f <=31; f++){
 
 		h_Hi_avg.x = 0;
 		h_Hi_avg.y = 0;
@@ -123,8 +123,8 @@ int main(){
 
 		//------- PARSING (Entrada de dados) -------//
 
-		fileplace_def = "C:\\Users\\Pedro\\Documents\\MATLAB\\dados\\defs_"+to_string(i)+".txt";
-		fileplace_vec = "C:\\Users\\Pedro\\Documents\\MATLAB\\dados\\vecs_"+to_string(i)+".txt";
+		fileplace_def = "C:\\Users\\Pedro\\Documents\\CUDA\\IN\\defs_"+to_string(f)+".txt";
+		fileplace_vec = "C:\\Users\\Pedro\\Documents\\CUDA\\IN\\vecs_"+to_string(f)+".txt";
 
 		fstream filein_def;
 		fstream filein_vec;
@@ -141,7 +141,7 @@ int main(){
 			if (k == 10)
 				k = 0;
 			filein_def >> h_pil_pos[j].x >> h_pil_pos[j].y >> h_pil_pos[j].z;
-			h_dip[j] = temp_dip[k];
+			h_dip[j] = 1.2E-6*temp_dip[k];
 		}
 
 		filein_def.close();
@@ -168,18 +168,17 @@ int main(){
 
 		//cudaMemcpy(h_dist, Hi_tot_inc, sizeof(vec)*ni*nj, cudaMemcpyDeviceToHost); //UNCOMMENT TO DIAGNOSE
 		ofstream fileout_points;
-		fileplace_points = "C:\\Users\\Pedro\\Documents\\CUDA_OUT\\points_" + to_string(i) + ".txt";
+		fileplace_points = "C:\\Users\\Pedro\\Documents\\CUDA\\OUT\\points_" + to_string(f) + ".txt";
 		fileout_points.open(fileplace_points);
-		for (i = 0; i < ni; i++){
-			for (j = 0; j < ni; j++){
-				fileout_points << Hi_tot_thrust[j + i * ni] << "\t";
-				h_Hi_avg = h_Hi_avg + Hi_tot_thrust[i];
-			}
+		for (i = 0; i < ni*ni; i++){
+			fileout_points << Hi_tot_thrust[i];
+			h_Hi_avg = h_Hi_avg + Hi_tot_thrust[i];
 			fileout_points << endl;
 		}
 		h_Hi_avg = h_Hi_avg / (128 * 128);
 		fileout_points.close();
 		fileout_avgs << h_Hi_avg << endl;
+		cout << f << endl;
 	}
 
 	fileout_avgs.close();
