@@ -10,6 +10,10 @@
 #include "cu_veclib.cuh"
 
 #define PI 3.14159
+#define DIPOLES 90
+#define MOMENTO .12
+#define DIMENSAOX 0.003
+#define DIMENSAOY 0.003
 
 using namespace std;
 
@@ -18,15 +22,15 @@ __global__ void init_map(vec *d_coord){
 	int i = blockDim.x*blockIdx.x + threadIdx.x;
 	int j = blockDim.y*blockIdx.y + threadIdx.y;
 	if (i < 128 && j < 128){
-		d_coord[i + j * 128].x = i*0.001 / (double)128;
-		d_coord[i + j * 128].y = j*0.001 / (double)128;
+		d_coord[i + j * 128].x = i*DIMENSAOX / (double)128;
+		d_coord[i + j * 128].y = j*DIMENSAOY / (double)128;
 		d_coord[i + j * 128].z = 0;
 	}
 }
 
 __global__ void init_pos(vec *d_pil_pos, double x_off, double y_off){
 	int i = blockDim.x*blockIdx.x + threadIdx.x;
-	if (i < 50){
+	if (i < DIPOLES){
 		d_pil_pos[i].x = d_pil_pos[i].x + x_off;
 		d_pil_pos[i].y = d_pil_pos[i].y + y_off;
 	}
@@ -36,27 +40,27 @@ __global__ void init_dist(vec *d_pil_pos, vec *d_coord, vec *d_dist){
 	int i = blockDim.x*blockIdx.x + threadIdx.x;
 	int j = blockDim.y*blockIdx.y + threadIdx.y;
 	int k;
-	for (k = 0; k < 50; k++){
+	for (k = 0; k < DIPOLES; k++){
 		if (i < 128 && j < 128)
-			d_dist[k + 50 * i + 50 * 128 * j] = d_coord[i + 128 * j] - d_pil_pos[k];
+			d_dist[k + DIPOLES * i + DIPOLES * 128 * j] = d_coord[i + 128 * j] - d_pil_pos[k];
 	}
 }
 __global__ void calc_H(vec *d_dist, vec *d_dip, vec *d_Hi_inc, vec *d_Hi_tot, int *d_keys){
 	int i = blockDim.x*blockIdx.x + threadIdx.x;
 	int j = blockDim.y*blockIdx.y + threadIdx.y;
 	int k;
-	for (k = 0; k < 50; k++){
+	for (k = 0; k < DIPOLES; k++){
 		if (i < 128 && j < 128){
-			d_Hi_inc[k + 50 * i + 50 * 128 * j] = (double)3 * d_dist[k + 50 * i + 50 * 128 * j] * (d_dip[k] * d_dist[k + 50 * i + 50 * 128 * j]) / pow(d_dist[k + 50 * i + 50 * 128 * j].abs(), 5) - d_dip[k] / pow(d_dist[k + 50 * i + 50 * 128 * j].abs(), 3);
-			d_Hi_inc[k + 50 * i + 50 * 128 * j] = d_Hi_inc[k + 50 * i + 50 * 128 * j] * 0.001 / (4 * PI);
+			d_Hi_inc[k + DIPOLES * i + DIPOLES * 128 * j] = (double)3 * d_dist[k + DIPOLES * i + DIPOLES * 128 * j] * (d_dip[k] * d_dist[k + DIPOLES * i + DIPOLES * 128 * j]) / pow(d_dist[k + DIPOLES * i + DIPOLES * 128 * j].abs(), 5) - d_dip[k] / pow(d_dist[k + DIPOLES * i + DIPOLES * 128 * j].abs(), 3);
+			d_Hi_inc[k + DIPOLES * i + DIPOLES * 128 * j] = d_Hi_inc[k + DIPOLES * i + DIPOLES * 128 * j] * 0.001;
 		}
 	}
 }
 
 __global__ void index_keys(int *d_keys){
 	int i = blockDim.x*blockIdx.x + threadIdx.x;
-	if (i < 128 * 128 * 50)
-		d_keys[i] = 1 + i / (int)50;
+	if (i < 128 * 128 * DIPOLES)
+		d_keys[i] = 1 + i / (int)DIPOLES;
 }
 
 
@@ -64,7 +68,7 @@ int main(){
 	// PLACA GRÁFICA: NVIDIA GEFORCE 820M - COMPUTE CAPABILITY: 2.1
 
 	clock_t at, bt;
-	int ndip = 50; //# de dipolos
+	int ndip = DIPOLES; //# de dipolos
 	int ni = 128; //# de threads (linhas da matriz)
 	int nj = 128*ndip; //# de blocos (linhas da matriz*dipolos do pilar = 6400)
 	int i, j = 0, k = 0, f;
@@ -74,7 +78,7 @@ int main(){
 	int BlocksPerGrid = nj;
 	dim3 tpb(16, 16);
 	dim3 bpg(80, 80);
-	double x_off=0.0005, y_off=0.0005;
+	double x_off=0.0015, y_off=0.0015;
 
 	vec *h_dip, *h_pil_pos, *h_Hi_inc, *temp_dip;
 	vec h_Hi_avg(0, 0, 0);
@@ -138,7 +142,7 @@ int main(){
 			if (k == 10)
 				k = 0;
 			filein_def >> h_pil_pos[j].x >> h_pil_pos[j].y >> h_pil_pos[j].z;
-			h_dip[j] = 1.2E-6*temp_dip[k];
+			h_dip[j] = MOMENTO*1E-6*temp_dip[k];
 		}
 
 		filein_def.close();
