@@ -9,15 +9,41 @@
 #include <time.h>
 #include "cu_veclib.cuh"
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+
 #define PI 3.14159
-#define DIPOLES 90
-#define MOMENTO .12
+#define DIPOLES 50
+#define MOMENTO .000015
 #define DIMENSAOX 0.003
 #define DIMENSAOY 0.003
 
 using namespace std;
 
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = true)
+{
+	if (code != cudaSuccess)
+	{
+		fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+		if (abort) exit(code);
+	}
+}
 
+__global__ void init_H(vec *d_H_tot){
+	int i = blockDim.x*blockIdx.x + threadIdx.x;
+	int j = blockDim.y*blockIdx.y + threadIdx.y;
+	if (i < 128 && j < 128){
+		d_H_tot[i + 128 * j].x = 0;
+		d_H_tot[i + 128 * j].y = 0;
+		d_H_tot[i + 128 * j].z = 0;
+	}
+}
+
+__global__ void add_H_component(vec *d_H_tot, vec *d_H_comp){
+	int i = blockDim.x*blockIdx.x + threadIdx.x;
+	int j = blockDim.y*blockIdx.y + threadIdx.y;
+	if (i < 128 && j < 128)
+		d_H_tot[i + 128 * j] = d_H_tot[i + 128 * j] + d_H_comp[i + 128 * j];
+}
 __global__ void init_map(vec *d_coord){
 	int i = blockDim.x*blockIdx.x + threadIdx.x;
 	int j = blockDim.y*blockIdx.y + threadIdx.y;
@@ -71,27 +97,28 @@ int main(){
 	int ndip = DIPOLES; //# de dipolos
 	int ni = 128; //# de threads (linhas da matriz)
 	int nj = 128*ndip; //# de blocos (linhas da matriz*dipolos do pilar = 6400)
-	int i, j = 0, k = 0, f;
+	int i, j = 0, k = 0, f, l;
 	string fileplace_def, fileplace_vec, fileplace_points, fileplace_avgs;
 
 	int threadsPerBlock = ni;
 	int BlocksPerGrid = nj;
 	dim3 tpb(16, 16);
-	dim3 bpg(80, 80);
+	dim3 bpg(100, 100);
 	double x_off=0.0015, y_off=0.0015;
 
-	vec *h_dip, *h_pil_pos, *h_Hi_inc, *temp_dip;
+	vec *h_dip, *h_pil_pos, *h_Hi_inc, *temp_dip, *h_H_tot;
 	vec h_Hi_avg(0, 0, 0);
 
 	//---------------------------ALOCAÇÃO DE ESPAÇO----------------------------//
 	h_dip = (vec*)malloc(sizeof(vec)*ndip); //Vector de magnetização dos dipolos
+	h_H_tot = (vec*)malloc(sizeof(vec)*ni*ni);
 	temp_dip = (vec*)malloc(sizeof(vec)*10); //Vector auxiliar
 	h_pil_pos = (vec*)malloc(sizeof(vec)*ndip); //Posição dos dipolos
 	h_Hi_inc = (vec*)malloc(sizeof(vec)*ni*ni); //Valor do campo incidente num elemento de área 
 	
 	int *d_keys, *d_rest;
-	vec *d_dist, *d_pil_pos, *d_Hi_inc, *d_dip, *d_coord, *d_Hi_tot;
-	vec *d_Hi_avg;
+	vec *d_dist, *d_pil_pos, *d_Hi_inc, *d_dip, *d_coord, *d_Hi_tot, *d_tot_tot;
+	vec *d_Hi_avg, *d_H_tot;
 
 	cudaMalloc(&d_Hi_avg, sizeof(vec));
 	cudaMalloc(&d_dist, sizeof(vec)*ni*nj);
@@ -100,8 +127,10 @@ int main(){
 	cudaMalloc(&d_pil_pos, sizeof(vec)*ndip);
 	cudaMalloc(&d_Hi_inc, sizeof(vec)*ni*nj);
 	cudaMalloc(&d_Hi_tot, sizeof(vec)*ni*ni);
+	cudaMalloc(&d_H_tot, sizeof(vec)*ni*ni);
 	cudaMalloc(&d_dip, sizeof(vec)*ndip);
 	cudaMalloc(&d_coord, sizeof(vec)*ni*ni);
+	cudaMalloc(&d_tot_tot, sizeof(vec)*ni*ni);
 
 	thrust::device_ptr<vec> Hi_tot_thrust = thrust::device_pointer_cast(d_Hi_tot);
 	thrust::device_ptr<vec> Hi_inc_thrust = thrust::device_pointer_cast(d_Hi_inc);
@@ -116,7 +145,7 @@ int main(){
 	fileplace_avgs = "C:\\Users\\Pedro\\Documents\\CUDA\\OUT\\avgs.txt";
 	fileout_avgs.open(fileplace_avgs);
 
-	for (f = 1; f <=31; f++){
+	for (f = 1; f <= 240; f=f+8){
 
 		h_Hi_avg.x = 0;
 		h_Hi_avg.y = 0;
@@ -124,8 +153,8 @@ int main(){
 
 		//------- PARSING (Entrada de dados) -------//
 
-		fileplace_def = "C:\\Users\\Pedro\\Documents\\CUDA\\IN\\defs_"+to_string(f)+".txt";
-		fileplace_vec = "C:\\Users\\Pedro\\Documents\\CUDA\\IN\\vecs_"+to_string(f)+".txt";
+		fileplace_def = "C:\\Users\\Pedro\\Documents\\CUDA\\IN\\defs_" + to_string(f) + ".txt";
+		fileplace_vec = "C:\\Users\\Pedro\\Documents\\CUDA\\IN\\vecs_" + to_string(f) + ".txt";
 
 		fstream filein_def;
 		fstream filein_vec;
@@ -138,42 +167,57 @@ int main(){
 
 		filein_vec.close();
 
-		for (j = 0; j < ndip; j++,k++){
-			if (k == 10)
-				k = 0;
-			filein_def >> h_pil_pos[j].x >> h_pil_pos[j].y >> h_pil_pos[j].z;
-			h_dip[j] = MOMENTO*1E-6*temp_dip[k];
+		for (l = 0; l < 500; l++){
+			k = 0;
+			if (l % 100 == 0)
+				cout << l << endl;
+			for (j = 0; j < ndip; j++, k++){
+				if (k == 10)
+					k = 0;
+				filein_def >> h_pil_pos[j].x >> h_pil_pos[j].y >> h_pil_pos[j].z;
+				h_dip[j] = MOMENTO*1E-6*temp_dip[k];
+			}//Abrir este "for" para passar a fazer as contas iterando também cada fila de pilares no cpu
+
+			//------ DATA TRANSFER (H -> D) --------//
+
+			cudaMemcpy(d_dip, h_dip, sizeof(vec)*ndip, cudaMemcpyHostToDevice);
+			cudaMemcpy(d_pil_pos, h_pil_pos, sizeof(vec)*ndip, cudaMemcpyHostToDevice);
+
+			//-----------INICIALIZAÇÃO------------------//
+
+			//cudaDeviceReset();
+
+			init_map << <bpg, tpb >> >(d_coord);
+			init_pos << <BlocksPerGrid, threadsPerBlock >> >(d_pil_pos, x_off, y_off);
+			init_dist << <bpg, tpb >> >(d_pil_pos, d_coord, d_dist);
+			init_H << <bpg, tpb >> >(d_H_tot);
+
+			//------ CÁLCULO ------ //
+			calc_H << <bpg, tpb >> >(d_dist, d_dip, d_Hi_inc, d_Hi_tot, d_keys);
+			gpuErrchk(cudaPeekAtLastError());
+			index_keys << <BlocksPerGrid, threadsPerBlock >> >(d_keys);
+			gpuErrchk(cudaPeekAtLastError());
+			cudaDeviceSynchronize();
+			gpuErrchk(cudaPeekAtLastError());
+			thrust::reduce_by_key(keys_thrust, keys_thrust + ni * nj, Hi_inc_thrust, rest_thrust, Hi_tot_thrust);
+
+			add_H_component << <bpg, tpb >> >(d_H_tot, d_Hi_tot);
+
+			bt = (clock() - at) / CLOCKS_PER_SEC;
+			//------ DATA TRANSFER (D -> H) --------//
+
+			//cudaMemcpy(h_dist, Hi_tot_inc, sizeof(vec)*ni*nj, cudaMemcpyDeviceToHost); //UNCOMMENT TO DIAGNOSE
+			cudaMemcpy(h_H_tot, d_H_tot, sizeof(vec)*ni*ni, cudaMemcpyDeviceToHost);
+
+
 		}
-
 		filein_def.close();
-
-		//------ DATA TRANSFER (H -> D) --------//
-
-		cudaMemcpy(d_dip, h_dip, sizeof(vec)*ndip, cudaMemcpyHostToDevice);
-		cudaMemcpy(d_pil_pos, h_pil_pos, sizeof(vec)*ndip, cudaMemcpyHostToDevice);
-
-		//-----------INICIALIZAÇÃO------------------//
-
-		init_map << <bpg, tpb >> >(d_coord);
-		init_pos << <BlocksPerGrid, threadsPerBlock >> >(d_pil_pos, x_off, y_off);
-		init_dist << <bpg, tpb >> >(d_pil_pos, d_coord, d_dist);
-
-		//------ CÁLCULO ------ //
-		calc_H << <bpg, tpb >> >(d_dist, d_dip, d_Hi_inc, d_Hi_tot, d_keys);
-		index_keys << <BlocksPerGrid, threadsPerBlock >> >(d_keys);
-		cudaDeviceSynchronize();
-		thrust::reduce_by_key(keys_thrust, keys_thrust + ni * nj, Hi_inc_thrust, rest_thrust, Hi_tot_thrust);
-
-		bt = (clock() - at) / CLOCKS_PER_SEC;
-		//------ DATA TRANSFER (D -> H) --------//
-
-		//cudaMemcpy(h_dist, Hi_tot_inc, sizeof(vec)*ni*nj, cudaMemcpyDeviceToHost); //UNCOMMENT TO DIAGNOSE
 		ofstream fileout_points;
 		fileplace_points = "C:\\Users\\Pedro\\Documents\\CUDA\\OUT\\points_" + to_string(f) + ".txt";
 		fileout_points.open(fileplace_points);
 		for (i = 0; i < ni*ni; i++){
-			fileout_points << Hi_tot_thrust[i];
-			h_Hi_avg = h_Hi_avg + Hi_tot_thrust[i];
+			fileout_points << h_H_tot[i];
+			h_Hi_avg = h_Hi_avg + h_H_tot[i];
 			fileout_points << endl;
 		}
 		h_Hi_avg = h_Hi_avg / (128 * 128);
@@ -181,7 +225,6 @@ int main(){
 		fileout_avgs << h_Hi_avg << endl;
 		cout << f << endl;
 	}
-
 	fileout_avgs.close();
 
 	//----------------------------Libertação de espaço-----------------------------//
