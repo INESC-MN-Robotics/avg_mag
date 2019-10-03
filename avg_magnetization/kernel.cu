@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <cstring>
 #include <thrust/reduce.h>
 #include <thrust/device_vector.h>
 #include <cuda_runtime.h>
