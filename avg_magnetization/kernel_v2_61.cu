@@ -107,9 +107,9 @@ int main(){
 	cudaMalloc(&d_keys, sizeof(int)*ni*nj);
 	cudaMalloc(&d_rest, sizeof(int)*ni*ni);
 	cudaMalloc(&d_pil_pos, sizeof(vec)*ndip);
-	cudaMalloc(&d_Hi_tot, sizeof(vec)*ni*ni);
+	cudaMalloc(&d_Hi_tot, sizeof(vec)*ni*nj);
 	cudaMalloc(&d_dip, sizeof(vec)*ndip);
-	cudaMalloc(&d_coord, sizeof(vec)*ni*ni);
+	cudaMalloc(&d_coord, sizeof(vec)*ni*nj);
 	cudaMalloc((vec**)&d_Hi_inc, sizeof(vec*)*ni);
 	for(i = 0; i < ni; i++){
 		cudaMalloc(&(d_Hi_inc[i]), sizeof(vec)*nj);
@@ -123,7 +123,7 @@ int main(){
 	
 	//--------------------------PARSING (ENTRADA DE DADOS)--------------------------//
 
-	fileplace_def = "teste_displacement";
+	fileplace_def = "teste_displacement.txt";
 	fstream filein_def;
 	filein_def.open(fileplace_def.c_str());
 	
