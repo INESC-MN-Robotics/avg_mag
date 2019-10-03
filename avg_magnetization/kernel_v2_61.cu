@@ -115,11 +115,6 @@ int main(){
 		cudaMalloc(&(d_Hi_inc[i]), sizeof(vec)*nj);
 	}
 
-	thrust::device_ptr<vec> Hi_tot_thrust = thrust::device_pointer_cast(d_Hi_tot);
-	thrust::device_ptr<vec> Hi_inc_thrust = thrust::device_pointer_cast(d_Hi_inc);
-	thrust::device_ptr<int> keys_thrust = thrust::device_pointer_cast(d_keys);
-	thrust::device_ptr<int> rest_thrust = thrust::device_pointer_cast(d_rest);
-
 	cout << "Simulador de nanorods" << endl << endl;
 	
 	at = clock();
