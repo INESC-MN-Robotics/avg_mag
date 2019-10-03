@@ -2,8 +2,6 @@
 #include <cmath>
 #include <iostream>
 #include <thrust/reduce.h>
-#include <curand.h>
-#include <curand_kernel.h>
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
 #include <cuda_runtime.h>
