@@ -130,7 +130,7 @@ int main(){
 
 	fileplace_def = "teste_displacement";
 	fstream filein_def;
-	filein_def.open(fileplace_def);
+	filein_def.open(fileplace_def.c_str());
 	
 	for(i = 0; i < nk; i++){
 		filein_def >> h_pil_pos[i].x >> h_pil_pos[i].y >> h_pil_pos[i].z >> temp_dip.x >> temp_dip.y >> temp_dip.z;
@@ -160,7 +160,6 @@ int main(){
 	free(h_dip);
 	free(h_pil_pos);
 	free(h_Hi_inc);
-	free(temp_dip);
 
 	at = (clock() - at) / CLOCKS_PER_SEC;
 	
