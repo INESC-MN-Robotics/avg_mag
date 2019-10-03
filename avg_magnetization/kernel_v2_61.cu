@@ -110,9 +110,9 @@ int main(){
 	cudaMalloc(&d_Hi_tot, sizeof(vec)*ni*ni);
 	cudaMalloc(&d_dip, sizeof(vec)*ndip);
 	cudaMalloc(&d_coord, sizeof(vec)*ni*ni);
-	cudaMalloc((vec**)&d_Hi_inc, sizeof(vec*)*ni*nj);
+	cudaMalloc((vec**)&d_Hi_inc, sizeof(vec*)*ni);
 	for(i = 0; i < ni; i++){
-		cudaMalloc((vec*)&(d_Hi_inc[i]), sizeof(vec)*nj);
+		cudaMalloc(&(d_Hi_inc[i]), sizeof(vec)*nj);
 	}
 
 	thrust::device_ptr<vec> Hi_tot_thrust = thrust::device_pointer_cast(d_Hi_tot);
