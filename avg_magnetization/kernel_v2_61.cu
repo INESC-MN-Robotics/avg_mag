@@ -84,13 +84,13 @@ int main(){
 	dim3 bpg(4, 4, nk);
 	double x_off=0.0015, y_off=0.0015;
 
-	vec *h_dip, *h_pil_pos, *temp_dip;
+	vec *h_dip, *h_pil_pos;
 	vec **h_Hi_inc;
 	vec h_Hi_avg(0, 0, 0);
+	vec temp_dip(0, 0, 0); //temporary vector
 
 	//---------------------------ALOCAÇÃO DE ESPAÇO----------------------------//
 	h_dip = (vec*)malloc(sizeof(vec)*nk); //Vector de magnetização dos dipolos
-	temp_dip = (vec*)malloc(sizeof(vec)*10); //Vector auxiliar
 	h_pil_pos = (vec*)malloc(sizeof(vec)*nk); //Posição dos dipolos
 	h_Hi_inc = (vec**)malloc(sizeof(vec*)*ni);	//Valor do campo incidente num elemento de área 
 	for(i = 0; i < ni; i++){
@@ -128,7 +128,7 @@ int main(){
 	
 	//--------------------------PARSING (ENTRADA DE DADOS)--------------------------//
 
-	fileplace_def = "C:\\Users\\Pedro\\Documents\\CUDA\\IN\\defs_"+to_string(f)+".txt";
+	fileplace_def = "teste_displacement";
 	fstream filein_def;
 	filein_def.open(fileplace_def);
 	
