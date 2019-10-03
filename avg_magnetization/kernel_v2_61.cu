@@ -75,6 +75,8 @@ int main(){
 	int nj = 128; //Y
 	int nk = 15622; //DIPOLOS
 	
+	printf("HEYHEY");
+	
 	int i, j = 0, k = 0, f;
 	string fileplace_def, fileplace_vec, fileplace_points, fileplace_avgs;
 
